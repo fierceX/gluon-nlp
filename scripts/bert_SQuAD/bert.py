@@ -23,6 +23,7 @@ __all__ = ['BERTSquad', 'BERTloss']
 from mxnet.gluon import Block
 from mxnet.gluon import nn, loss
 from mxnet.gluon.loss import Loss
+from mxnet import nd
 
 
 class BERTSquad(Block):
