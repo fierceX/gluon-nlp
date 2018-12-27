@@ -1,6 +1,8 @@
+import argparse
 import collections
 import json
 import logging
+import random
 
 import gluonnlp as nlp
 import mxnet as mx
@@ -96,21 +98,13 @@ bert, vocab = nlp.model.bert_12_768_12(dataset_name=dataset_name,
 
 berttoken = nlp.data.BERTTokenizer(vocab=vocab)
 
+logging.info('Loader train data...')
 train_data = SQData('./squad1.1/train-v1.1.json', version_2=version_2)
-dev_data = SQData('./squad1.1/dev-v1.1.json',
-                  version_2=version_2, is_training=False)
-
 train_data = train_data.transform(
     SQuADTransform(berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
                    max_query_length=max_query_length, is_training=True))
-dev_data = dev_data.transform(SQuADTransform(
-    berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
-    max_query_length=max_query_length, is_training=False)._transform)
-
 train_dataloader = mx.gluon.data.DataLoader(
     train_data, batch_size=batch_size, shuffle=True)
-dev_dataloader = mx.gluon.data.SimpleDataset(dev_data)
-
 
 net = BERTSquad(bert=bert)
 net.Dense.initialize(init=mx.init.Normal(0.02), ctx=ctx)
@@ -122,7 +116,9 @@ loss_function.hybridize(static_alloc=True)
 
 def Train():
 
-    trainer = gluon.Trainer(net.collect_params(), 'adam', {
+    logging.info('Start training')
+
+    trainer = gluon.Trainer(net.collect_params(), optimizer, {
                             'learning_rate': lr, 'epsilon': 1e-9})
 
     num_train_examples = len(train_data)
@@ -175,13 +171,23 @@ def Train():
 
 
 def Evaluate():
+    logging.info('Loader dev data...')
+    dev_data = SQData('./squad1.1/dev-v1.1.json',
+                      version_2=version_2, is_training=False)
+
+    dev_data = dev_data.transform(SQuADTransform(
+        berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
+        max_query_length=max_query_length, is_training=False)._transform)
+
+    dev_dataloader = mx.gluon.data.SimpleDataset(dev_data)
 
     _Result = collections.namedtuple(
         '_Result', ['qas_id', 'start_logits', 'end_logits'])
 
     all_results = {}
 
-    for f in tqdm(dev_dataloader):
+    logging.info('Start predict')
+    for f in dev_dataloader:
         input_ids = nd.reshape(nd.array(f.input_ids), (1, -1)
                                ).astype('float32').as_in_context(ctx)
         token_types = nd.reshape(nd.array(f.segment_ids),
