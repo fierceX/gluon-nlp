@@ -21,7 +21,7 @@
 __all__ = ['BERTSquad', 'BERTloss']
 
 from mxnet.gluon import Block
-from mxnet.gluon import nn
+from mxnet.gluon import nn, loss
 from mxnet.gluon.loss import Loss
 
 
@@ -42,7 +42,7 @@ class BERTSquad(Block):
 class BERTloss(Loss):
     def __init__(self, weight=None, batch_axis=0, **kwargs):
         super(BERTloss, self).__init__(weight=None, batch_axis=0, **kwargs)
-        self.loss = mx.gluon.loss.SoftmaxCELoss()
+        self.loss = loss.SoftmaxCELoss()
 
     def hybrid_forward(self, F, pred, label):
         pred = F.split(pred, axis=0, num_outputs=2)
