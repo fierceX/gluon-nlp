@@ -18,6 +18,30 @@ from mxnet.gluon.data import Dataset, SimpleDataset
 import json
 import gluonnlp as nlp
 import collections
+import numpy as np
+
+
+class SquadExample(object):
+    """A single training/test example for simple sequence classification.
+
+       For examples without an answer, the start and end position are -1.
+    """
+
+    def __init__(self,
+                 qas_id,
+                 question_text,
+                 doc_tokens,
+                 orig_answer_text=None,
+                 start_position=None,
+                 end_position=None,
+                 is_impossible=False):
+        self.qas_id = qas_id
+        self.question_text = question_text
+        self.doc_tokens = doc_tokens
+        self.orig_answer_text = orig_answer_text
+        self.start_position = start_position
+        self.end_position = end_position
+        self.is_impossible = is_impossible
 
 
 class SQData(SimpleDataset):
@@ -25,13 +49,6 @@ class SQData(SimpleDataset):
         self.input_file = filename
         self.is_training = is_training
         self.version_2 = version_2
-        self.SquadExample = collections.namedtuple('SquadExample', ["qas_id",
-                                                                    "question_text",
-                                                                    "doc_tokens",
-                                                                    "orig_answer_text",
-                                                                    "start_position",
-                                                                    "end_position",
-                                                                    "is_impossible"])
         super(SQData, self).__init__(self._read())
 
     def _read(self):
@@ -103,7 +120,7 @@ class SQData(SimpleDataset):
                             end_position = -1
                             orig_answer_text = ""
 
-                    example = self.SquadExample(
+                    example = SquadExample(
                         qas_id=qas_id,
                         question_text=question_text,
                         doc_tokens=doc_tokens,
