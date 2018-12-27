@@ -17,6 +17,7 @@
 from mxnet.gluon.data import Dataset, SimpleDataset
 import json
 import gluonnlp as nlp
+import collections
 
 
 class SQData(SimpleDataset):
