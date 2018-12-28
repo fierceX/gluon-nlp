@@ -14,6 +14,9 @@
 # limitations under the License.
 
 import collections
+import string
+import re
+from collections import Counter
 import numpy as np
 import json
 
@@ -77,7 +80,6 @@ def get_final_text(pred_text, orig_text, tokenizer):
     # and `pred_text`, and check if they are the same length. If they are
     # NOT the same length, the heuristic has failed. If they are the same
     # length, we assume the characters are one-to-one aligned.
-    tokenizer = nlp.data.BasicTokenizer(lower_case=lower_case)
 
     tok_text = " ".join(tokenizer(orig_text))
 
@@ -120,13 +122,16 @@ def get_final_text(pred_text, orig_text, tokenizer):
     return output_text
 
 
-def predictions(dev_dataset, all_results, tokenizer, n_best_size=10, version_2=False):
+def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_score_diff_threshold=0.0, n_best_size=10, version_2=False):
     score_null = 1000000  # large and positive
     min_null_feature_index = 0  # the paragraph slice with min mull score
     null_start_logit = 0  # the start logit at the slice with min null score
     null_end_logit = 0  # the end logit at the slice with min null score
-    max_answer_length = 64
-    null_score_diff_threshold = 0.0
+    max_answer_length = max_answer_length
+    null_score_diff_threshold = null_score_diff_threshold
+
+    start_logits, end_logits = all_results
+
     _PrelimPrediction = collections.namedtuple("PrelimPrediction",
                                                ["qas_id", "start_index", "end_index", "start_logit", "end_logit"])
 
@@ -137,15 +142,14 @@ def predictions(dev_dataset, all_results, tokenizer, n_best_size=10, version_2=F
     all_nbest_json = collections.OrderedDict()
     scores_diff_json = collections.OrderedDict()
 
-    for feature in tqdm(dev_dataset):
+    for feature, start_logit, end_logit in tqdm(zip(dev_dataset, start_logits, end_logits)):
 
         prelim_predictions = []
-        result = all_results[feature.qas_id]
 
         start_indexes = _get_best_indexes(
-            result.start_logits[0].tolist(), n_best_size)
+            start_logit[0].tolist(), n_best_size)
         end_indexes = _get_best_indexes(
-            result.end_logits[0].tolist(), n_best_size)
+            end_logit[0].tolist(), n_best_size)
 
         for start_index in start_indexes:
             for end_index in end_indexes:
@@ -172,8 +176,8 @@ def predictions(dev_dataset, all_results, tokenizer, n_best_size=10, version_2=F
                         qas_id=feature.qas_id,
                         start_index=start_index,
                         end_index=end_index,
-                        start_logit=result.start_logits[0][start_index],
-                        end_logit=result.end_logits[0][end_index]))
+                        start_logit=start_logit[0][start_index],
+                        end_logit=end_logit[0][end_index]))
         if version_2:
             prelim_predictions.append(
                 _PrelimPrediction(

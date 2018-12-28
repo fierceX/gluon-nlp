@@ -243,8 +243,8 @@ class SQuADTransform(object):
             assert len(input_ids) == self.max_seq_length
             assert len(segment_ids) == self.max_seq_length
 
-            start_position = None
-            end_position = None
+            start_position = 0
+            end_position = 0
             if self.is_training and not example.is_impossible:
                 # For training, if our document chunk does not contain an annotation
                 # we throw it out, since there is nothing to predict.

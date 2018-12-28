@@ -8,7 +8,8 @@ SQuAD, with Gluon NLP Toolkit.
 
 @article{devlin2018bert,
   title={BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding},
-  author={Devlin, Jacob and Chang, Ming-Wei and Lee, Kenton and Toutanova, Kristina},
+  author={Devlin, Jacob and Chang, Ming- \
+      Wei and Lee, Kenton and Toutanova, Kristina},
   journal={arXiv preprint arXiv:1810.04805},
   year={2018}
 }
@@ -147,7 +148,7 @@ train_data = train_data.transform(
     SQuADTransform(berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
                    max_query_length=max_query_length, is_training=True))
 train_dataloader = mx.gluon.data.DataLoader(
-    train_data, batch_size=batch_size, shuffle=True)
+    train_data, batch_size=batch_size, num_workers=4, shuffle=True)
 
 net = BERTSquad(bert=bert)
 net.Dense.initialize(init=mx.init.Normal(0.02), ctx=ctx)
@@ -221,33 +222,31 @@ def Evaluate():
     dev_data = SQData('./squad1.1/dev-v1.1.json',
                       version_2=version_2, is_training=False)
 
-    dev_data = dev_data.transform(SQuADTransform(
+    dev_dataset = dev_data.transform(SQuADTransform(
         berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
         max_query_length=max_query_length, is_training=False)._transform)
 
-    dev_dataloader = mx.gluon.data.SimpleDataset(dev_data)
+    dev_data = dev_data.transform(SQuADTransform(
+        berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
+        max_query_length=max_query_length, is_training=False))
 
-    _Result = collections.namedtuple(
-        '_Result', ['qas_id', 'start_logits', 'end_logits'])
-
-    all_results = {}
+    dev_dataloader = mx.gluon.data.DataLoader(
+        dev_data, batch_size=batch_size, num_workers=4, shuffle=False)
 
     logging.info('Start predict')
-    for f in dev_dataloader:
-        input_ids = nd.reshape(nd.array(f.input_ids), (1, -1)
-                               ).astype('float32').as_in_context(ctx)
-        token_types = nd.reshape(nd.array(f.segment_ids),
-                                 (1, -1)).astype('float32').as_in_context(ctx)
-        valid_length = nd.reshape(nd.array([f.valid_length]), (1,)).astype(
-            'float32').as_in_context(ctx)
-        out = net(input_ids, token_types, valid_length)
-        output = nd.split(out, axis=0, num_outputs=2)
+    for data in tqdm(dev_dataloader):
+        inputs, token_types, valid_length, _, _ = data
 
-        all_results[f.qas_id] = _Result(f.qas_id, output[0].reshape(
-            (-3, 0)).asnumpy(), output[1].reshape((-3, 0)).asnumpy())
+        out = net(inputs.astype('float32').as_in_context(
+            ctx), token_types.astype('float32').as_in_context(ctx), valid_length.astype('float32').as_in_context(ctx))
+
+        output = nd.split(out, axis=0, num_outputs=2)
+        start_logits.extend(output[0].reshape((-3, 0)).asnumpy())
+        end_logits.extend(output[1].reshape((-3, 0)).asnumpy())
+    all_results = (start_logits, end_logits)
 
     all_predictions, all_nbest_json = predictions(
-        dev_dataset=dev_dataloader, all_results=all_results, tokenizer=nlp.data.BasicTokenizer(lower_case=True))
+        dev_dataset=dev_dataset, all_results=all_results, max_answer_length=max_answer_length, tokenizer=nlp.data.BasicTokenizer(lower_case=True))
 
     f = open('predict.json', 'w', encoding='utf-8')
     f.write(json.dumps(all_predictions))
@@ -258,4 +257,5 @@ def Evaluate():
 
 if __name__ == '__main__':
     Train()
+    net.save_parameters('./net')
     Evaluate()
