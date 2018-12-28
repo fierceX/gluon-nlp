@@ -41,6 +41,7 @@ import json
 import logging
 import random
 import time
+import os
 
 import gluonnlp as nlp
 import mxnet as mx
@@ -59,13 +60,20 @@ logging.getLogger().setLevel(logging.DEBUG)
 parser = argparse.ArgumentParser(description='BERT QA example.'
                                              'We fine-tune the BERT model on SQuAD 1.1')
 
+parser.add_argument('--train_file', type=str, default='./train-v1.1.json',
+                    help='SQuAD json for training. E.g., train-v1.1.json')
+parser.add_argument('--predict_file', type=str, default=None,
+                    help='SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json')
+parser.add_argument('--output_dir', type=str, default='./output_dir',
+                    help='The output directory where the model params will be written.')
+
 parser.add_argument('--epochs', type=int, default=2, help='number of epochs')
 
 parser.add_argument('--batch_size', type=int, default=12,
                     help='Batch size. Number of examples per gpu in a minibatch')
 
 parser.add_argument('--test_batch_size', type=int,
-                    default=8, help='Test batch size')
+                    default=24, help='Test batch size')
 
 parser.add_argument('--optimizer', type=str, default='adam',
                     help='optimization algorithm')
@@ -112,6 +120,12 @@ parser.add_argument('--gpu', action='store_true',
 args = parser.parse_args()
 logging.info(args)
 
+train_file = args.train_file
+predict_file = args.predict_file
+output_dir = args.output_dir
+if os.path.exists(output_dir):
+    os.mkdir(output_dir)
+
 epochs = args.epochs
 batch_size = args.batch_size
 test_batch_size = args.test_batch_size
@@ -143,7 +157,7 @@ bert, vocab = nlp.model.bert_12_768_12(dataset_name=dataset_name,
 berttoken = nlp.data.BERTTokenizer(vocab=vocab)
 
 logging.info('Loader train data...')
-train_data = SQData('./squad1.1/train-v1.1.json', version_2=version_2)
+train_data = SQData(train_file, version_2=version_2)
 train_data = train_data.transform(
     SQuADTransform(berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
                    max_query_length=max_query_length, is_training=True))
@@ -216,11 +230,12 @@ def Train():
                 tic = time.time()
                 step_loss = 0.0
 
+    net.save_parameters(output_dir+'net_parameters')
+
 
 def Evaluate():
     logging.info('Loader dev data...')
-    dev_data = SQData('./squad1.1/dev-v1.1.json',
-                      version_2=version_2, is_training=False)
+    dev_data = SQData(predict_file, version_2=version_2, is_training=False)
 
     dev_dataset = dev_data.transform(SQuADTransform(
         berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
@@ -231,10 +246,12 @@ def Evaluate():
         max_query_length=max_query_length, is_training=False))
 
     dev_dataloader = mx.gluon.data.DataLoader(
-        dev_data, batch_size=batch_size, num_workers=4, shuffle=False)
+        dev_data, batch_size=test_batch_size, num_workers=4, shuffle=False)
 
+    start_logits = []
+    end_logits = []
     logging.info('Start predict')
-    for data in tqdm(dev_dataloader):
+    for data in dev_dataloader:
         inputs, token_types, valid_length, _, _ = data
 
         out = net(inputs.astype('float32').as_in_context(
@@ -245,17 +262,23 @@ def Evaluate():
         end_logits.extend(output[1].reshape((-3, 0)).asnumpy())
     all_results = (start_logits, end_logits)
 
-    all_predictions, all_nbest_json = predictions(
+    all_predictions, all_nbest_json, scores_diff_json = predictions(
         dev_dataset=dev_dataset, all_results=all_results, max_answer_length=max_answer_length, tokenizer=nlp.data.BasicTokenizer(lower_case=True))
 
-    f = open('predict.json', 'w', encoding='utf-8')
-    f.write(json.dumps(all_predictions))
-    f.close()
+    with open(os.path.join(output_dir, 'predictions.json'), 'w', encoding='utf-8') as all_predictions_write:
+        all_predictions_write.write(json.dumps(all_predictions))
 
-    logging.info(evaluate('./squad1.1/dev-v1.1.json', all_predictions))
+    with open(os.path.join(output_dir, 'nbest_predictions.json'), 'w', encoding='utf-8') as all_predictions_write:
+        all_predictions_write.write(json.dumps(all_nbest_json))
+
+    if version_2:
+        with open(os.path.join(output_dir, 'null_odds.json'), 'w', encoding='utf-8') as all_predictions_write:
+            all_predictions_write.write(json.dumps(scores_diff_json))
+    else:
+        logging.info(evaluate(predict_file, all_predictions))
 
 
 if __name__ == '__main__':
     Train()
-    net.save_parameters('./net')
-    Evaluate()
+    if predict_file is not None:
+        Evaluate()

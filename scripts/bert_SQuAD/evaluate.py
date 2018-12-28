@@ -19,8 +19,6 @@ import re
 from collections import Counter
 import numpy as np
 import json
-
-from tqdm import tqdm
 import six
 
 
@@ -142,14 +140,14 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
     all_nbest_json = collections.OrderedDict()
     scores_diff_json = collections.OrderedDict()
 
-    for feature, start_logit, end_logit in tqdm(zip(dev_dataset, start_logits, end_logits)):
+    for feature, start_logit, end_logit in zip(dev_dataset, start_logits, end_logits):
 
         prelim_predictions = []
 
         start_indexes = _get_best_indexes(
-            start_logit[0].tolist(), n_best_size)
+            start_logit.tolist(), n_best_size)
         end_indexes = _get_best_indexes(
-            end_logit[0].tolist(), n_best_size)
+            end_logit.tolist(), n_best_size)
 
         for start_index in start_indexes:
             for end_index in end_indexes:
@@ -176,8 +174,8 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
                         qas_id=feature.qas_id,
                         start_index=start_index,
                         end_index=end_index,
-                        start_logit=start_logit[0][start_index],
-                        end_logit=end_logit[0][end_index]))
+                        start_logit=start_logit[start_index],
+                        end_logit=end_logit[end_index]))
         if version_2:
             prelim_predictions.append(
                 _PrelimPrediction(
@@ -266,6 +264,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
 
         if not version_2:
             all_predictions[feature.qas_id] = nbest_json[0]["text"]
+            scores_diff_json = None
         else:
             # predict "" iff the null score - the score of best non-null > threshold
             score_diff = score_null - best_non_null_entry.start_logit - \
@@ -278,7 +277,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
                 all_predictions[feature.qas_id] = best_non_null_entry.text
 
         all_nbest_json[feature.qas_id] = nbest_json
-    return all_predictions, all_nbest_json
+    return all_predictions, all_nbest_json, scores_diff_json
 
 
 def normalize_answer(s):
