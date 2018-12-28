@@ -129,6 +129,12 @@ n_best_size = args.n_best_size
 max_answer_length = args.max_answer_length
 null_score_diff_threshold = args.null_score_diff_threshold
 
+
+if max_seq_length <= max_query_length + 3:
+    raise ValueError(
+        "The max_seq_length (%d) must be greater than max_query_length "
+        "(%d) + 3" % (max_seq_length, max_query_length))
+
 bert, vocab = nlp.model.bert_12_768_12(dataset_name=dataset_name,
                                        pretrained=True, ctx=ctx, use_pooler=False,
                                        use_decoder=False, use_classifier=False,)
