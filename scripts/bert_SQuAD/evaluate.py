@@ -1,4 +1,17 @@
-
+# coding=utf-8
+# Copyright 2018 The Google AI Language Team Authors, Allenai and DMLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import collections
 import numpy as np
@@ -21,7 +34,7 @@ def _get_best_indexes(logits, n_best_size):
     return best_indexes
 
 
-def get_final_text(pred_text, orig_text, lower_case):
+def get_final_text(pred_text, orig_text, tokenizer):
     """Project the tokenized prediction back to the original text."""
 
     # When we created the data, we kept track of the alignment between original
@@ -107,7 +120,7 @@ def get_final_text(pred_text, orig_text, lower_case):
     return output_text
 
 
-def predictions(dev_dataset, all_results, n_best_size=10, version_2=False, lower_cased=True):
+def predictions(dev_dataset, all_results, tokenizer, n_best_size=10, version_2=False):
     score_null = 1000000  # large and positive
     min_null_feature_index = 0  # the paragraph slice with min mull score
     null_start_logit = 0  # the start logit at the slice with min null score
@@ -198,7 +211,7 @@ def predictions(dev_dataset, all_results, n_best_size=10, version_2=False, lower
                 tok_text = " ".join(tok_text.split())
                 orig_text = " ".join(orig_tokens)
 
-                final_text = get_final_text(tok_text, orig_text, lower_cased)
+                final_text = get_final_text(tok_text, orig_text, tokenizer)
                 if final_text in seen_predictions:
                     continue
 

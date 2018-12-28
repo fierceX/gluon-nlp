@@ -241,7 +241,7 @@ def Evaluate():
             (-3, 0)).asnumpy(), output[1].reshape((-3, 0)).asnumpy())
 
     all_predictions, all_nbest_json = predictions(
-        dev_dataset=dev_dataloader, all_results=all_results)
+        dev_dataset=dev_dataloader, all_results=all_results, tokenizer=nlp.data.BasicTokenizer(lower_case=True))
 
     f = open('predict.json', 'w', encoding='utf-8')
     f.write(json.dumps(all_predictions))
