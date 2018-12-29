@@ -38,14 +38,14 @@ class SquadExample(object):
                  start_position=None,
                  end_position=None,
                  is_impossible=False):
-    self.qas_id = qas_id
-    self.question_text = question_text
-    self.doc_tokens = doc_tokens
-    self.orig_answer_text = orig_answer_text
-    self.start_position = start_position
-    self.end_position = end_position
-    self.is_impossible = is_impossible
-    self.example_id = example_id
+        self.qas_id = qas_id
+        self.question_text = question_text
+        self.doc_tokens = doc_tokens
+        self.orig_answer_text = orig_answer_text
+        self.start_position = start_position
+        self.end_position = end_position
+        self.is_impossible = is_impossible
+        self.example_id = example_id
 
 
 class SQuAD(SimpleDataset):
