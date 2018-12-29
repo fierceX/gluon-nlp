@@ -49,7 +49,7 @@ from mxnet import gluon, nd
 
 import gluonnlp as nlp
 from bert import BERTloss, BERTSquad
-from dataset import SQData, SQuADTransform, bert_qa_batchify_fn
+from dataset import SQuAD, SQuADTransform, bert_qa_batchify_fn
 from evaluate import evaluate, predictions
 
 np.random.seed(0)
@@ -199,7 +199,7 @@ bert, vocab = nlp.model.bert_12_768_12(
 berttoken = nlp.data.BERTTokenizer(vocab=vocab)
 
 logging.info('Loader train data...')
-train_data = SQData(train_file, version_2=version_2)
+train_data = SQuAD(train_file, version_2=version_2)
 train_data = train_data.transform(
     SQuADTransform(
         berttoken,
@@ -288,7 +288,7 @@ def Train():
 
 def Evaluate():
     logging.info('Loader dev data...')
-    dev_data = SQData(predict_file, version_2=version_2, is_training=False)
+    dev_data = SQuAD(predict_file, version_2=version_2, is_training=False)
 
     dev_dataset = dev_data.transform(
         SQuADTransform(
@@ -307,7 +307,7 @@ def Evaluate():
             is_training=False))
 
     dev_dataloader = mx.gluon.data.DataLoader(
-        dev_data, batch_size=test_batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=False)
+        dev_data, batch_size=test_batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=False, last_batch='keep')
 
     start_logits = []
     end_logits = []

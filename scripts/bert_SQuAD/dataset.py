@@ -18,6 +18,7 @@ import collections
 import json
 
 import numpy as np
+from mxnet import context
 from mxnet.gluon.data import SimpleDataset
 
 # __all__ = ['MRPCDataset', 'ClassificationTransform', 'BERTTransform']
@@ -367,10 +368,10 @@ def bert_qa_batchify_fn(data):
     """Collate data into batch."""
     if isinstance(data[0], tuple):
         data = zip(*data)
-        return [default_batchify_fn(i) for i in data]
+        return [bert_qa_batchify_fn(i) for i in data]
     else:
         data = np.asarray([n for row in data for n in row])
-        return nd.array(data, dtype=data.dtype)
+        return nd.array(data, dtype=data.dtype, ctx=context.Context('cpu_shared', 0))
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
