@@ -257,7 +257,7 @@ def Train():
             trainer.set_learning_rate(new_lr)
 
             with mx.autograd.record():
-                _, _, inputs, token_types, valid_length, start_label, end_label = data
+                _, inputs, token_types, valid_length, start_label, end_label = data
 
                 out = net(
                     inputs.astype('float32').as_in_context(ctx),
@@ -292,12 +292,13 @@ def Evaluate():
     logging.info('Loader dev data...')
     dev_data = SQuAD(predict_file, version_2=version_2, is_training=False)
 
-    dev_dataset = preprocess_dataset(dev_data, SQuADTransform(
-        berttoken,
-        max_seq_length=max_seq_length,
-        doc_stride=doc_stride,
-        max_query_length=max_query_length,
-        is_training=False)._transform)
+    dev_dataset = dev_data.transform(
+        SQuADTransform(
+            berttoken,
+            max_seq_length=max_seq_length,
+            doc_stride=doc_stride,
+            max_query_length=max_query_length,
+            is_training=False)._transform)
 
     dev_data_transform = preprocess_dataset(dev_data, SQuADTransform(
         berttoken,
@@ -318,7 +319,7 @@ def Evaluate():
     all_results = {}
 
     for data in dev_dataloader:
-        example_ids, id_list, inputs, token_types, valid_length, _, _ = data
+        example_ids, inputs, token_types, valid_length, _, _ = data
 
         out = net(
             inputs.astype('float32').as_in_context(ctx),

@@ -20,7 +20,7 @@ import collections
 import json
 
 import numpy as np
-from mxnet import context
+from mxnet import nd, context
 from mxnet.gluon.data import SimpleDataset
 
 # __all__ = ['MRPCDataset', 'ClassificationTransform', 'BERTTransform']
