@@ -12,18 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import time
-import multiprocessing as mp
-"""BERT datasets."""
-
 import collections
 import json
+import multiprocessing as mp
+import time
 
 import numpy as np
-from mxnet import nd, context
+from mxnet import context, nd
 from mxnet.gluon.data import SimpleDataset
 
-# __all__ = ['MRPCDataset', 'ClassificationTransform', 'BERTTransform']
+"""BERT datasets."""
 
 
 class SquadExample(object):

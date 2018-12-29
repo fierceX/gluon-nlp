@@ -49,7 +49,8 @@ from mxnet import gluon, nd
 
 import gluonnlp as nlp
 from bert import BERTloss, BERTSquad
-from dataset import SQuAD, SQuADTransform, bert_qa_batchify_fn, preprocess_dataset
+from dataset import (SQuAD, SQuADTransform, bert_qa_batchify_fn,
+                     preprocess_dataset)
 from evaluate import evaluate, predictions
 
 np.random.seed(0)
@@ -63,7 +64,7 @@ parser = argparse.ArgumentParser(description='BERT QA example.'
 parser.add_argument(
     '--train_file',
     type=str,
-    default='./train-v1.1.json',
+    default='train-v1.1.json',
     help='SQuAD json for training. E.g., train-v1.1.json')
 parser.add_argument(
     '--predict_file',
@@ -74,32 +75,33 @@ parser.add_argument(
     '--output_dir',
     type=str,
     default='./output_dir',
-    help='The output directory where the model params will be written.')
+    help='The output directory where the model params will be written. default is ./output_dir')
 
-parser.add_argument('--epochs', type=int, default=2, help='number of epochs')
+parser.add_argument('--epochs', type=int, default=2,
+                    help='number of epochs, default is 2')
 
 parser.add_argument(
     '--batch_size',
     type=int,
     default=12,
-    help='Batch size. Number of examples per gpu in a minibatch')
+    help='Batch size. Number of examples per gpu in a minibatch. default is 12')
 
 parser.add_argument(
-    '--test_batch_size', type=int, default=24, help='Test batch size')
+    '--test_batch_size', type=int, default=24, help='Test batch size. default is 24')
 
 parser.add_argument(
-    '--optimizer', type=str, default='adam', help='optimization algorithm')
+    '--optimizer', type=str, default='adam', help='optimization algorithm. default is adam)
 parser.add_argument(
-    '--lr', type=float, default=3e-5, help='Initial learning rate')
+    '--lr', type=float, default=3e-5, help='Initial learning rate. default is 3e-5')
 
 parser.add_argument(
     '--warmup_ratio',
     type=float,
     default=0.1,
-    help='ratio of warmup steps used in NOAM\'s stepsize schedule')
+    help='ratio of warmup steps used in NOAM\'s stepsize schedule. default is 0.1')
 
 parser.add_argument(
-    '--log_interval', type=int, default=50, help='report interval')
+    '--log_interval', type=int, default=50, help='report interval. default is 50')
 
 parser.add_argument(
     '--max_seq_length',
@@ -107,49 +109,49 @@ parser.add_argument(
     default=384,
     help='The maximum total input sequence length after WordPiece tokenization.'
     'Sequences longer than this will be truncated, and sequences shorter '
-    'than this will be padded.')
+    'than this will be padded. default is 384')
 
 parser.add_argument(
     '--doc_stride',
     type=int,
     default=128,
     help='When splitting up a long document into chunks, how much stride to '
-    'take between chunks.')
+    'take between chunks. default is 128')
 
 parser.add_argument(
     '--max_query_length',
     type=int,
     default=64,
     help='The maximum number of tokens for the question. Questions longer than '
-    'this will be truncated to this length.')
+    'this will be truncated to this length. default is 64')
 
 parser.add_argument(
     '--n_best_size',
     type=int,
     default=20,
     help='The total number of n-best predictions to generate in the '
-    'nbest_predictions.json output file.')
+    'nbest_predictions.json output file. default is 20')
 
 parser.add_argument(
     '--max_answer_length',
     type=int,
     default=30,
     help='The maximum length of an answer that can be generated. This is needed '
-    'because the start and end predictions are not conditioned on one another.'
+    'because the start and end predictions are not conditioned on one another. default is 30'
 )
 
 parser.add_argument(
     '--version_2',
     type=bool,
     default=False,
-    help='If true, the SQuAD examples contain some that do not have an answer.'
+    help='If true, the SQuAD examples contain some that do not have an answer. default is False'
 )
 
 parser.add_argument(
     '--null_score_diff_threshold',
     type=float,
     default=0.0,
-    help='If null_score - best_non_null is greater than the threshold predict null.'
+    help='If null_score - best_non_null is greater than the threshold predict null. default is 0.0'
 )
 
 parser.add_argument(
@@ -199,7 +201,7 @@ bert, vocab = nlp.model.bert_12_768_12(
 berttoken = nlp.data.BERTTokenizer(vocab=vocab)
 
 
-logging.info('Loader train data...')
+logging.info('Loader Train data...')
 train_data = SQuAD(train_file, version_2=version_2)
 
 train_data_transform = preprocess_dataset(train_data, SQuADTransform(
@@ -222,7 +224,7 @@ loss_function.hybridize(static_alloc=True)
 
 def Train():
 
-    logging.info('Start training')
+    logging.info('Start Training')
 
     trainer = gluon.Trainer(net.collect_params(), optimizer, {
         'learning_rate': lr,
