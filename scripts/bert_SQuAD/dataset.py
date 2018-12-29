@@ -70,7 +70,7 @@ def preprocess_dataset(dataset, transform):
         for data in pool.map(preprocess, dataset):
             dataset_transform.extend(data)
 
-        dataset = gluon.data.SimpleDataset(dataset_transform)
+        dataset = SimpleDataset(dataset_transform)
     end = time.time()
     print(end-start)
     return dataset
