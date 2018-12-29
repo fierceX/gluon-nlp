@@ -41,13 +41,14 @@ class BERTSquad(Block):
     params : ParameterDict or None
         See document of `mx.gluon.Block`.
     """
+
     def __init__(self, bert, prefix=None, params=None):
         super(BERTSquad, self).__init__(prefix=prefix, params=params)
         self.bert = bert
         with self.name_scope():
             self.Dense = nn.Dense(units=2, flatten=False)
 
-    def forward(self, inputs, token_types, valid_length=None):\
+    def forward(self, inputs, token_types, valid_length=None):
         """Generate the unnormalized score for the given the input sequences.
 
         Parameters
