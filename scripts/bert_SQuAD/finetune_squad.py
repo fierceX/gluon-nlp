@@ -149,8 +149,7 @@ parser.add_argument(
     '--null_score_diff_threshold',
     type=float,
     default=0.0,
-    help=
-    'If null_score - best_non_null is greater than the threshold predict null.'
+    help='If null_score - best_non_null is greater than the threshold predict null.'
 )
 
 parser.add_argument(
