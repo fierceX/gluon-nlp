@@ -49,7 +49,7 @@ from mxnet import gluon, nd
 
 import gluonnlp as nlp
 from bert import BERTloss, BERTSquad
-from dataset import SQuAD, SQuADTransform, bert_qa_batchify_fn
+from dataset import SQuAD, SQuADTransform, bert_qa_batchify_fn, preprocess_dataset
 from evaluate import evaluate, predictions
 
 np.random.seed(0)
@@ -198,17 +198,19 @@ bert, vocab = nlp.model.bert_12_768_12(
 
 berttoken = nlp.data.BERTTokenizer(vocab=vocab)
 
+
 logging.info('Loader train data...')
 train_data = SQuAD(train_file, version_2=version_2)
-train_data = train_data.transform(
-    SQuADTransform(
-        berttoken,
-        max_seq_length=max_seq_length,
-        doc_stride=doc_stride,
-        max_query_length=max_query_length,
-        is_training=True))
+
+train_data_transform = preprocess_dataset(train_data, SQuADTransform(
+    berttoken,
+    max_seq_length=max_seq_length,
+    doc_stride=doc_stride,
+    max_query_length=max_query_length,
+    is_training=True))
+
 train_dataloader = mx.gluon.data.DataLoader(
-    train_data, batch_size=batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=True)
+    train_data_transform, batch_size=batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=True)
 
 net = BERTSquad(bert=bert)
 net.Dense.initialize(init=mx.init.Normal(0.02), ctx=ctx)
@@ -290,24 +292,22 @@ def Evaluate():
     logging.info('Loader dev data...')
     dev_data = SQuAD(predict_file, version_2=version_2, is_training=False)
 
-    dev_dataset = dev_data.transform(
-        SQuADTransform(
-            berttoken,
-            max_seq_length=max_seq_length,
-            doc_stride=doc_stride,
-            max_query_length=max_query_length,
-            is_training=False)._transform)
+    dev_dataset = preprocess_dataset(dev_data, SQuADTransform(
+        berttoken,
+        max_seq_length=max_seq_length,
+        doc_stride=doc_stride,
+        max_query_length=max_query_length,
+        is_training=False)._transform)
 
-    dev_data = dev_data.transform(
-        SQuADTransform(
-            berttoken,
-            max_seq_length=max_seq_length,
-            doc_stride=doc_stride,
-            max_query_length=max_query_length,
-            is_training=False))
+    dev_data_transform = preprocess_dataset(dev_data, SQuADTransform(
+        berttoken,
+        max_seq_length=max_seq_length,
+        doc_stride=doc_stride,
+        max_query_length=max_query_length,
+        is_training=False))
 
     dev_dataloader = mx.gluon.data.DataLoader(
-        dev_data, batch_size=test_batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=False, last_batch='keep')
+        dev_data_transform, batch_size=test_batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=False, last_batch='keep')
 
     start_logits = []
     end_logits = []

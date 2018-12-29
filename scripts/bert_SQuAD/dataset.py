@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import time
+import multiprocessing as mp
 """BERT datasets."""
 
 import collections
@@ -47,6 +49,49 @@ class SquadExample(object):
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.example_id = example_id
+
+
+_transform = None
+
+
+def preprocess(example):
+    global _transform
+    feature = _transform(example)
+    return feature
+
+
+def preprocess_dataset(dataset, transform):
+    global _transform
+    _transform = transform
+    start = time.time()
+
+    with mp.Pool(8) as pool:
+        dataset_transform = []
+        for data in pool.map(preprocess, dataset):
+            dataset_transform.extend(data)
+
+        dataset = gluon.data.SimpleDataset(dataset_transform)
+    end = time.time()
+    print(end-start)
+    return dataset
+
+
+class SquadFeature():
+    def __init__(self, example_id, qas_id, doc_tokens, doc_span_index, tokens, token_to_orig_map,
+                 token_is_max_context, input_ids, valid_length, segment_ids, start_position, end_position, is_impossible):
+        self.example_id = example_id
+        self.qas_id = qas_id
+        self.doc_tokens = doc_tokens
+        self.doc_span_index = doc_span_index
+        self.tokens = tokens
+        self.token_to_orig_map = token_to_orig_map
+        self.token_is_max_context = token_is_max_context
+        self.input_ids = input_ids
+        self.valid_length = valid_length
+        self.segment_ids = segment_ids
+        self.start_position = start_position
+        self.end_position = end_position
+        self.is_impossible = is_impossible
 
 
 class SQuAD(SimpleDataset):
@@ -207,10 +252,6 @@ class SQuADTransform(object):
         self.max_query_length = max_query_length
         self.doc_stride = doc_stride
         self.is_training = is_training
-        self.feature = collections.namedtuple('feature',
-                                              ['example_id', 'qas_id', 'doc_tokens', 'doc_span_index', 'tokens', 'token_to_orig_map',
-                                               'token_is_max_context', 'input_ids', 'valid_length', 'segment_ids',
-                                               'start_position', 'end_position', 'is_impossible'])
 
     def _transform(self, example):
         features = []
@@ -326,7 +367,7 @@ class SQuADTransform(object):
             if self.is_training and example.is_impossible:
                 start_position = 0
                 end_position = 0
-            features.append(self.feature(example_id=example.example_id,
+            features.append(SquadFeature(example_id=example.example_id,
                                          qas_id=example.qas_id,
                                          doc_tokens=example.doc_tokens,
                                          doc_span_index=doc_span_index,
@@ -342,36 +383,30 @@ class SQuADTransform(object):
         return features
 
     def __call__(self, example):
-        features = self._transform(example)
-        input_ids = []
-        segment_ids = []
-        valid_length = []
-        start_position = []
-        end_position = []
+        examples = self._transform(example)
+        features = []
 
-        feature_id = []
-        example_ids = []
+        for example in examples:
+            feature = []
+            feature.append(example.example_id)
+            feature.append(example.input_ids)
+            feature.append(example.segment_ids)
+            feature.append(example.valid_length)
+            feature.append(example.start_position)
+            feature.append(example.end_position)
+            features.append(feature)
 
-        for i, feature in enumerate(features):
-            input_ids.append(feature.input_ids)
-            segment_ids.append(feature.segment_ids)
-            valid_length.append(feature.valid_length)
-            start_position.append(feature.start_position)
-            end_position.append(feature.end_position)
-            feature_id.append(i)
-            example_ids.append(feature.example_id)
-
-        return example_ids, feature_id, input_ids, segment_ids, valid_length, start_position, end_position
+        return features
 
 
 def bert_qa_batchify_fn(data):
     """Collate data into batch."""
-    if isinstance(data[0], tuple):
-        data = zip(*data)
-        return [bert_qa_batchify_fn(i) for i in data]
-    else:
-        data = np.asarray([n for row in data for n in row])
+    def batchify_fn(data):
+        data = np.asarray(data)
         return nd.array(data, dtype=data.dtype, ctx=context.Context('cpu_shared', 0))
+
+    data = zip(*data)
+    return [batchify_fn(i) for i in data]
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
