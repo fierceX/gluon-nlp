@@ -49,7 +49,7 @@ import numpy as np
 from mxnet import gluon, nd
 
 from bert import BERTloss, BERTSquad
-from dataset import SQData, SQuADTransform
+from dataset import SQData, SQuADTransform, bert_qa_batchify_fn
 from evaluate import evaluate, predictions
 
 np.random.seed(0)
@@ -162,7 +162,7 @@ train_data = train_data.transform(
     SQuADTransform(berttoken, max_seq_length=max_seq_length, doc_stride=doc_stride,
                    max_query_length=max_query_length, is_training=True))
 train_dataloader = mx.gluon.data.DataLoader(
-    train_data, batch_size=batch_size, num_workers=4, shuffle=True)
+    train_data, batch_size=batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=True)
 
 net = BERTSquad(bert=bert)
 net.Dense.initialize(init=mx.init.Normal(0.02), ctx=ctx)
@@ -207,7 +207,7 @@ def Train():
             trainer.set_learning_rate(new_lr)
 
             with mx.autograd.record():
-                inputs, token_types, valid_length, start_label, end_label = data
+                _, _, inputs, token_types, valid_length, start_label, end_label = data
 
                 out = net(inputs.astype('float32').as_in_context(
                     ctx), token_types.astype('float32').as_in_context(ctx), valid_length.astype('float32').as_in_context(ctx))
@@ -246,21 +246,32 @@ def Evaluate():
         max_query_length=max_query_length, is_training=False))
 
     dev_dataloader = mx.gluon.data.DataLoader(
-        dev_data, batch_size=test_batch_size, num_workers=4, shuffle=False)
+        dev_data, batch_size=test_batch_size, batchify_fn=bert_qa_batchify_fn, num_workers=4, shuffle=False)
 
     start_logits = []
     end_logits = []
     logging.info('Start predict')
+
+    _Result = collections.namedtuple(
+        "_Result", ["example_id", "start_logits", "end_logits"])
+    all_results = {}
+
     for data in dev_dataloader:
-        inputs, token_types, valid_length, _, _ = data
+        example_ids, id_list, inputs, token_types, valid_length, _, _ = data
 
         out = net(inputs.astype('float32').as_in_context(
             ctx), token_types.astype('float32').as_in_context(ctx), valid_length.astype('float32').as_in_context(ctx))
 
         output = nd.split(out, axis=0, num_outputs=2)
-        start_logits.extend(output[0].reshape((-3, 0)).asnumpy())
-        end_logits.extend(output[1].reshape((-3, 0)).asnumpy())
-    all_results = (start_logits, end_logits)
+        start_logits = output[0].reshape((-3, 0)).asnumpy()
+        end_logits = output[1].reshape((-3, 0)).asnumpy()
+
+        for example_id, start, end in zip(example_ids, start_logits, end_logits):
+            example_id = example_id.asscalar()
+            if example_id not in all_results:
+                all_results[example_id] = []
+            all_results[example_id].append(
+                _Result(example_id, start.tolist(), end.tolist()))
 
     all_predictions, all_nbest_json, scores_diff_json = predictions(
         dev_dataset=dev_dataset, all_results=all_results, max_answer_length=max_answer_length, tokenizer=nlp.data.BasicTokenizer(lower_case=True))

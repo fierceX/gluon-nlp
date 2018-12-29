@@ -31,17 +31,19 @@ class SquadExample(object):
                  qas_id,
                  question_text,
                  doc_tokens,
+                 example_id,
                  orig_answer_text=None,
                  start_position=None,
                  end_position=None,
                  is_impossible=False):
-        self.qas_id = qas_id
-        self.question_text = question_text
-        self.doc_tokens = doc_tokens
-        self.orig_answer_text = orig_answer_text
-        self.start_position = start_position
-        self.end_position = end_position
-        self.is_impossible = is_impossible
+    self.qas_id = qas_id
+    self.question_text = question_text
+    self.doc_tokens = doc_tokens
+    self.orig_answer_text = orig_answer_text
+    self.start_position = start_position
+    self.end_position = end_position
+    self.is_impossible = is_impossible
+    self.example_id = example_id
 
 
 class SQData(SimpleDataset):
@@ -62,6 +64,7 @@ class SQData(SimpleDataset):
             return False
 
         examples = []
+        example_id = 0
         for entry in input_data:
             for paragraph in entry["paragraphs"]:
                 paragraph_text = paragraph["context"]
@@ -124,11 +127,14 @@ class SQData(SimpleDataset):
                         qas_id=qas_id,
                         question_text=question_text,
                         doc_tokens=doc_tokens,
+                        example_id=example_id,
                         orig_answer_text=orig_answer_text,
                         start_position=start_position,
                         end_position=end_position,
                         is_impossible=is_impossible)
                     examples.append(example)
+
+                    example_id += 1
 
         return examples
 
@@ -149,11 +155,12 @@ class SQuADTransform(object):
         self.doc_stride = doc_stride
         self.is_training = is_training
         self.feature = collections.namedtuple("feature",
-                                              ["qas_id", "doc_tokens", "doc_span_index", "tokens", "token_to_orig_map",
+                                              ["example_id", "qas_id", "doc_tokens", "doc_span_index", "tokens", "token_to_orig_map",
                                                "token_is_max_context", "input_ids", "valid_length", "segment_ids",
                                                "start_position", "end_position", "is_impossible"])
 
     def _transform(self, example):
+        features = []
         query_tokens = self.tokenizer(example.question_text)
 
         if len(query_tokens) > self.max_query_length:
@@ -265,22 +272,52 @@ class SQuADTransform(object):
             if self.is_training and example.is_impossible:
                 start_position = 0
                 end_position = 0
-            return self.feature(qas_id=example.qas_id,
-                                doc_tokens=example.doc_tokens,
-                                doc_span_index=doc_span_index,
-                                tokens=tokens,
-                                token_to_orig_map=token_to_orig_map,
-                                token_is_max_context=token_is_max_context,
-                                input_ids=input_ids,
-                                valid_length=valid_length,
-                                segment_ids=segment_ids,
-                                start_position=start_position,
-                                end_position=end_position,
-                                is_impossible=example.is_impossible)
+            features.append(self.feature(example_id=example.example_id,
+                                         qas_id=example.qas_id,
+                                         doc_tokens=example.doc_tokens,
+                                         doc_span_index=doc_span_index,
+                                         tokens=tokens,
+                                         token_to_orig_map=token_to_orig_map,
+                                         token_is_max_context=token_is_max_context,
+                                         input_ids=input_ids,
+                                         valid_length=valid_length,
+                                         segment_ids=segment_ids,
+                                         start_position=start_position,
+                                         end_position=end_position,
+                                         is_impossible=example.is_impossible))
+        return features
 
     def __call__(self, example):
-        feature = self._transform(example)
-        return np.array(feature.input_ids, dtype='int32'), np.array(feature.segment_ids, dtype='int32'), np.array(feature.valid_length, dtype='int32'), np.array(feature.start_position, dtype='int32'), np.array(feature.end_position, dtype='int32')
+        features = self._transform(example)
+        input_ids = []
+        segment_ids = []
+        valid_length = []
+        start_position = []
+        end_position = []
+
+        feature_id = []
+        example_ids = []
+
+        for i, feature in enumerate(features):
+            input_ids.append(feature.input_ids)
+            segment_ids.append(feature.segment_ids)
+            valid_length.append(feature.valid_length)
+            start_position.append(feature.start_position)
+            end_position.append(feature.end_position)
+            feature_id.append(i)
+            example_ids.append(feature.example_id)
+
+        return example_ids, feature_id, input_ids, segment_ids, valid_length, start_position, end_position
+
+
+def bert_qa_batchify_fn(data):
+    """Collate data into batch."""
+    if isinstance(data[0], tuple):
+        data = zip(*data)
+        return [default_batchify_fn(i) for i in data]
+    else:
+        data = np.asarray([n for row in data for n in row])
+        return nd.array(data, dtype=data.dtype)
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,

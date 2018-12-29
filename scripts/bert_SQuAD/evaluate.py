@@ -121,6 +121,7 @@ def get_final_text(pred_text, orig_text, tokenizer):
 
 
 def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_score_diff_threshold=0.0, n_best_size=10, version_2=False):
+
     score_null = 1000000  # large and positive
     min_null_feature_index = 0  # the paragraph slice with min mull score
     null_start_logit = 0  # the start logit at the slice with min null score
@@ -128,10 +129,8 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
     max_answer_length = max_answer_length
     null_score_diff_threshold = null_score_diff_threshold
 
-    start_logits, end_logits = all_results
-
     _PrelimPrediction = collections.namedtuple("PrelimPrediction",
-                                               ["qas_id", "start_index", "end_index", "start_logit", "end_logit"])
+                                               ["feature_index", "start_index", "end_index", "start_logit", "end_logit"])
 
     _NbestPrediction = collections.namedtuple(
         "NbestPrediction", ["text", "start_logit", "end_logit"])
@@ -140,42 +139,42 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
     all_nbest_json = collections.OrderedDict()
     scores_diff_json = collections.OrderedDict()
 
-    for feature, start_logit, end_logit in zip(dev_dataset, start_logits, end_logits):
-
+    for features in dev_dataset:
+        results = all_results[features[0].example_id]
+        example = features[0]
         prelim_predictions = []
+        for features_id, (result, feature) in enumerate(zip(results, features)):
+            start_indexes = _get_best_indexes(result.start_logits, n_best_size)
+            end_indexes = _get_best_indexes(result.end_logits, n_best_size)
 
-        start_indexes = _get_best_indexes(
-            start_logit.tolist(), n_best_size)
-        end_indexes = _get_best_indexes(
-            end_logit.tolist(), n_best_size)
+            for start_index in start_indexes:
+                for end_index in end_indexes:
+                    # We could hypothetically create invalid predictions, e.g., predict
+                    # that the start of the span is in the question. We throw out all
+                    # invalid predictions.
+                    if start_index >= len(feature.tokens):
+                        continue
+                    if end_index >= len(feature.tokens):
+                        continue
+                    if start_index not in feature.token_to_orig_map:
+                        continue
+                    if end_index not in feature.token_to_orig_map:
+                        continue
+                    if not feature.token_is_max_context.get(start_index, False):
+                        continue
+                    if end_index < start_index:
+                        continue
+                    length = end_index - start_index + 1
+                    if length > max_answer_length:
+                        continue
+                    prelim_predictions.append(
+                        _PrelimPrediction(
+                            feature_index=features_id,
+                            start_index=start_index,
+                            end_index=end_index,
+                            start_logit=result.start_logits[start_index],
+                            end_logit=result.end_logits[end_index]))
 
-        for start_index in start_indexes:
-            for end_index in end_indexes:
-                # We could hypothetically create invalid predictions, e.g., predict
-                # that the start of the span is in the question. We throw out all
-                # invalid predictions.
-                if start_index >= len(feature.tokens):
-                    continue
-                if end_index >= len(feature.tokens):
-                    continue
-                if start_index not in feature.token_to_orig_map:
-                    continue
-                if end_index not in feature.token_to_orig_map:
-                    continue
-                if not feature.token_is_max_context.get(start_index, False):
-                    continue
-                if end_index < start_index:
-                    continue
-                length = end_index - start_index + 1
-                if length > max_answer_length:
-                    continue
-                prelim_predictions.append(
-                    _PrelimPrediction(
-                        qas_id=feature.qas_id,
-                        start_index=start_index,
-                        end_index=end_index,
-                        start_logit=start_logit[start_index],
-                        end_logit=end_logit[end_index]))
         if version_2:
             prelim_predictions.append(
                 _PrelimPrediction(
@@ -195,6 +194,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
         for pred in prelim_predictions:
             if len(nbest) >= n_best_size:
                 break
+            feature = features[pred.feature_index]
             if pred.start_index > 0:  # this is a non-null prediction
                 tok_tokens = feature.tokens[pred.start_index:(
                     pred.end_index + 1)]
@@ -264,7 +264,6 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
 
         if not version_2:
             all_predictions[feature.qas_id] = nbest_json[0]["text"]
-            scores_diff_json = None
         else:
             # predict "" iff the null score - the score of best non-null > threshold
             score_diff = score_null - best_non_null_entry.start_logit - \
@@ -276,7 +275,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
             else:
                 all_predictions[feature.qas_id] = best_non_null_entry.text
 
-        all_nbest_json[feature.qas_id] = nbest_json
+            all_nbest_json[feature.qas_id] = nbest_json
     return all_predictions, all_nbest_json, scores_diff_json
 
 
