@@ -14,15 +14,15 @@
 # limitations under the License.
 """BERT datasets."""
 
-from mxnet.gluon.data import Dataset, SimpleDataset
-import json
-import gluonnlp as nlp
 import collections
+import json
+
 import numpy as np
+from mxnet.gluon.data import SimpleDataset
 
-
+# __all__ = ['MRPCDataset', 'ClassificationTransform', 'BERTTransform']
 class SquadExample(object):
-    """A single training/test example for simple sequence classification.
+    """A single training/test example for SQuAD question.
 
        For examples without an answer, the start and end position are -1.
     """
@@ -44,27 +44,52 @@ class SquadExample(object):
         self.is_impossible = is_impossible
 
 
-class SQData(SimpleDataset):
+class SQuAD(SimpleDataset):
+    """Stanford Question Answering Dataset (SQuAD) - reading comprehension dataset.
+
+    From
+    https://rajpurkar.github.io/SQuAD-explorer/
+
+    License: CreativeCommons BY-SA 4.0
+
+    The original data format is json, which has multiple contexts (a context is a paragraph of text
+    from which questions are drawn). For each context there are multiple questions, and for each of
+    these questions there are multiple (usually 3) answers.
+    
+    This class loads the json and flattens it to question dataset.
+    Number of records in the dataset is equal to number of questions in json file.
+
+
+    Parameters
+    ----------
+    filename : str
+        SQuAD json file path.
+    is_training : bool, default True
+        Whether to run training.
+    version_2 : bool, default False
+        If true, the SQuAD examples contain some that do not have an answer.
+    """
     def __init__(self, filename, is_training=True, version_2=False):
         self.input_file = filename
         self.is_training = is_training
         self.version_2 = version_2
-        super(SQData, self).__init__(self._read())
+        super(SQuAD, self).__init__(self._read())
 
     def _read(self):
         """Read a SQuAD json file into a list of SquadExample."""
-        with open(self.input_file, "r") as reader:
-            input_data = json.load(reader)["data"]
+        with open(self.input_file, 'r') as reader:
+            input_data = json.load(reader)['data']
 
         def is_whitespace(c):
-            if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
+            if c == ' ' or c == '\t' or c == '\r' or c == '\n' or ord(
+                    c) == 0x202F:
                 return True
             return False
 
         examples = []
         for entry in input_data:
-            for paragraph in entry["paragraphs"]:
-                paragraph_text = paragraph["context"]
+            for paragraph in entry['paragraphs']:
+                paragraph_text = paragraph['context']
                 doc_tokens = []
                 char_to_word_offset = []
                 prev_is_whitespace = True
@@ -79,9 +104,9 @@ class SQData(SimpleDataset):
                         prev_is_whitespace = False
                     char_to_word_offset.append(len(doc_tokens) - 1)
 
-                for qa in paragraph["qas"]:
-                    qas_id = qa["id"]
-                    question_text = qa["question"]
+                for qa in paragraph['qas']:
+                    qas_id = qa['id']
+                    question_text = qa['question']
                     start_position = None
                     end_position = None
                     orig_answer_text = None
@@ -89,36 +114,37 @@ class SQData(SimpleDataset):
                     if self.is_training:
 
                         if self.version_2:
-                            is_impossible = qa["is_impossible"]
-                        if (len(qa["answers"]) != 1) and (not is_impossible):
+                            is_impossible = qa['is_impossible']
+                        if (len(qa['answers']) != 1) and (not is_impossible):
                             raise ValueError(
-                                "For training, each question should have exactly 1 answer.")
+                                'For training, each question should have exactly 1 answer.'
+                            )
                         if not is_impossible:
-                            answer = qa["answers"][0]
-                            orig_answer_text = answer["text"]
-                            answer_offset = answer["answer_start"]
+                            answer = qa['answers'][0]
+                            orig_answer_text = answer['text']
+                            answer_offset = answer['answer_start']
                             answer_length = len(orig_answer_text)
                             start_position = char_to_word_offset[answer_offset]
-                            end_position = char_to_word_offset[answer_offset + answer_length -
-                                                               1]
+                            end_position = char_to_word_offset[
+                                answer_offset + answer_length - 1]
                             # Only add answers where the text can be exactly recovered from the
                             # document. If this CAN'T happen it's likely due to weird Unicode
                             # stuff so we will just skip the example.
                             #
                             # Note that this means for training mode, every example is NOT
                             # guaranteed to be preserved.
-                            actual_text = " ".join(
+                            actual_text = ' '.join(
                                 doc_tokens[start_position:(end_position + 1)])
-                            cleaned_answer_text = " ".join(
+                            cleaned_answer_text = ' '.join(
                                 self.whitespace_tokenize(orig_answer_text))
                             if actual_text.find(cleaned_answer_text) == -1:
-                                print("Could not find answer: '%s' vs. '%s'",
-                                      actual_text, cleaned_answer_text)
+                                print('Could not find answer: %s vs. %s' %
+                                      (actual_text, cleaned_answer_text))
                                 continue
                         else:
                             start_position = -1
                             end_position = -1
-                            orig_answer_text = ""
+                            orig_answer_text = ''
 
                     example = SquadExample(
                         qas_id=qas_id,
@@ -142,18 +168,45 @@ class SQData(SimpleDataset):
 
 
 class SQuADTransform(object):
-    def __init__(self, tokenizer, max_seq_length=384, doc_stride=128, max_query_length=64, is_training=True):
+    """Dataset Transformation for BERT-style QA.
+
+    Parameters
+    ----------
+    tokenizer : BERTTokenizer.
+        Tokenizer for the sentences.
+    labels : list of int.
+        List of all label ids for the classification task.
+    max_seq_length : int, default 384
+        Maximum sequence length of the sentences.
+    doc_stride : int, default 128
+        pass
+    max_query_length : int, default 64
+        pass
+    is_training : bool, default True
+        Whether to run training.
+    """
+    def __init__(self,
+                 tokenizer,
+                 max_seq_length=384,
+                 doc_stride=128,
+                 max_query_length=64,
+                 is_training=True):
         self.tokenizer = tokenizer
         self.max_seq_length = max_seq_length
         self.max_query_length = max_query_length
         self.doc_stride = doc_stride
         self.is_training = is_training
-        self.feature = collections.namedtuple("feature",
-                                              ["qas_id", "doc_tokens", "doc_span_index", "tokens", "token_to_orig_map",
-                                               "token_is_max_context", "input_ids", "valid_length", "segment_ids",
-                                               "start_position", "end_position", "is_impossible"])
+        self.feature = collections.namedtuple('feature', [
+            'qas_id', 'doc_tokens', 'doc_span_index', 'tokens',
+            'token_to_orig_map', 'token_is_max_context', 'input_ids',
+            'valid_length', 'segment_ids', 'start_position', 'end_position',
+            'is_impossible'
+        ])
 
     def _transform(self, example):
+
+        
+
         query_tokens = self.tokenizer(example.question_text)
 
         if len(query_tokens) > self.max_query_length:
@@ -177,12 +230,13 @@ class SQuADTransform(object):
         if self.is_training and not example.is_impossible:
             tok_start_position = orig_to_tok_index[example.start_position]
             if example.end_position < len(example.doc_tokens) - 1:
-                tok_end_position = orig_to_tok_index[example.end_position + 1] - 1
+                tok_end_position = orig_to_tok_index[example.end_position +
+                                                     1] - 1
             else:
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
-                all_doc_tokens, tok_start_position, tok_end_position, self.tokenizer,
-                example.orig_answer_text)
+                all_doc_tokens, tok_start_position, tok_end_position,
+                self.tokenizer, example.orig_answer_text)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = self.max_seq_length - len(query_tokens) - 3
@@ -191,7 +245,7 @@ class SQuADTransform(object):
         # To deal with this we do a sliding window approach, where we take chunks
         # of the up to our max length with a stride of `doc_stride`.
         _DocSpan = collections.namedtuple(  # pylint: disable=invalid-name
-            "DocSpan", ["start", "length"])
+            'DocSpan', ['start', 'length'])
         doc_spans = []
         start_offset = 0
         while start_offset < len(all_doc_tokens):
@@ -208,12 +262,12 @@ class SQuADTransform(object):
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = []
-            tokens.append("[CLS]")
+            tokens.append('[CLS]')
             segment_ids.append(0)
             for token in query_tokens:
                 tokens.append(token)
                 segment_ids.append(0)
-            tokens.append("[SEP]")
+            tokens.append('[SEP]')
             segment_ids.append(0)
 
             for i in range(doc_span.length):
@@ -221,12 +275,12 @@ class SQuADTransform(object):
                 token_to_orig_map[len(
                     tokens)] = tok_to_orig_index[split_token_index]
 
-                is_max_context = _check_is_max_context(doc_spans, doc_span_index,
-                                                       split_token_index)
+                is_max_context = _check_is_max_context(
+                    doc_spans, doc_span_index, split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
                 segment_ids.append(1)
-            tokens.append("[SEP]")
+            tokens.append('[SEP]')
             segment_ids.append(1)
 
             input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
@@ -251,8 +305,8 @@ class SQuADTransform(object):
                 doc_start = doc_span.start
                 doc_end = doc_span.start + doc_span.length - 1
                 out_of_span = False
-                if not (tok_start_position >= doc_start and
-                        tok_end_position <= doc_end):
+                if not (tok_start_position >= doc_start
+                        and tok_end_position <= doc_end):
                     out_of_span = True
                 if out_of_span:
                     start_position = 0
@@ -265,22 +319,28 @@ class SQuADTransform(object):
             if self.is_training and example.is_impossible:
                 start_position = 0
                 end_position = 0
-            return self.feature(qas_id=example.qas_id,
-                                doc_tokens=example.doc_tokens,
-                                doc_span_index=doc_span_index,
-                                tokens=tokens,
-                                token_to_orig_map=token_to_orig_map,
-                                token_is_max_context=token_is_max_context,
-                                input_ids=input_ids,
-                                valid_length=valid_length,
-                                segment_ids=segment_ids,
-                                start_position=start_position,
-                                end_position=end_position,
-                                is_impossible=example.is_impossible)
+            return self.feature(
+                qas_id=example.qas_id,
+                doc_tokens=example.doc_tokens,
+                doc_span_index=doc_span_index,
+                tokens=tokens,
+                token_to_orig_map=token_to_orig_map,
+                token_is_max_context=token_is_max_context,
+                input_ids=input_ids,
+                valid_length=valid_length,
+                segment_ids=segment_ids,
+                start_position=start_position,
+                end_position=end_position,
+                is_impossible=example.is_impossible)
 
     def __call__(self, example):
         feature = self._transform(example)
-        return np.array(feature.input_ids, dtype='int32'), np.array(feature.segment_ids, dtype='int32'), np.array(feature.valid_length, dtype='int32'), np.array(feature.start_position, dtype='int32'), np.array(feature.end_position, dtype='int32')
+        return np.array(
+            feature.input_ids, dtype='int32'), np.array(
+                feature.segment_ids, dtype='int32'), np.array(
+                    feature.valid_length, dtype='int32'), np.array(
+                        feature.start_position, dtype='int32'), np.array(
+                            feature.end_position, dtype='int32')
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
@@ -309,11 +369,11 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     # the word "Japanese". Since our WordPiece tokenizer does not split
     # "Japanese", we just use "Japanese" as the annotation. This is fairly rare
     # in SQuAD, but does happen.
-    tok_answer_text = " ".join(tokenizer(orig_answer_text))
+    tok_answer_text = ' '.join(tokenizer(orig_answer_text))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
-            text_span = " ".join(doc_tokens[new_start:(new_end + 1)])
+            text_span = ' '.join(doc_tokens[new_start:(new_end + 1)])
             if text_span == tok_answer_text:
                 return (new_start, new_end)
 
