@@ -1,4 +1,5 @@
 # coding=utf-8
+
 # Copyright 2018 The Google AI Language Team Authors, Allenai and DMLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +15,11 @@
 # limitations under the License.
 
 import collections
-import string
-import re
-from collections import Counter
-import numpy as np
 import json
+import re
+import string
+from collections import Counter
+
 import six
 
 
@@ -67,11 +68,11 @@ def get_final_text(pred_text, orig_text, tokenizer):
         ns_chars = []
         ns_to_s_map = collections.OrderedDict()
         for (i, c) in enumerate(text):
-            if c == " ":
+            if c == ' ':
                 continue
             ns_to_s_map[len(ns_chars)] = i
             ns_chars.append(c)
-        ns_text = "".join(ns_chars)
+        ns_text = ''.join(ns_chars)
         return (ns_text, ns_to_s_map)
 
     # We first tokenize `orig_text`, strip whitespace from the result
@@ -79,7 +80,7 @@ def get_final_text(pred_text, orig_text, tokenizer):
     # NOT the same length, the heuristic has failed. If they are the same
     # length, we assume the characters are one-to-one aligned.
 
-    tok_text = " ".join(tokenizer(orig_text))
+    tok_text = ' '.join(tokenizer(orig_text))
 
     start_position = tok_text.find(pred_text)
     if start_position == -1:
@@ -120,8 +121,13 @@ def get_final_text(pred_text, orig_text, tokenizer):
     return output_text
 
 
-def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_score_diff_threshold=0.0, n_best_size=10, version_2=False):
-
+def predictions(dev_dataset,
+                all_results,
+                tokenizer,
+                max_answer_length=64,
+                null_score_diff_threshold=0.0,
+                n_best_size=10,
+                version_2=False):
     score_null = 1000000  # large and positive
     min_null_feature_index = 0  # the paragraph slice with min mull score
     null_start_logit = 0  # the start logit at the slice with min null score
@@ -129,11 +135,11 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
     max_answer_length = max_answer_length
     null_score_diff_threshold = null_score_diff_threshold
 
-    _PrelimPrediction = collections.namedtuple("PrelimPrediction",
-                                               ["feature_index", "start_index", "end_index", "start_logit", "end_logit"])
+    _PrelimPrediction = collections.namedtuple('PrelimPrediction',
+                                               ['feature_index', 'start_index', 'end_index', 'start_logit', 'end_logit'])
 
     _NbestPrediction = collections.namedtuple(
-        "NbestPrediction", ["text", "start_logit", "end_logit"])
+        'NbestPrediction', ['text', 'start_logit', 'end_logit'])
 
     all_predictions = collections.OrderedDict()
     all_nbest_json = collections.OrderedDict()
@@ -202,16 +208,16 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
                 orig_doc_end = feature.token_to_orig_map[pred.end_index]
                 orig_tokens = feature.doc_tokens[orig_doc_start:(
                     orig_doc_end + 1)]
-                tok_text = " ".join(tok_tokens)
+                tok_text = ' '.join(tok_tokens)
 
                 # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                tok_text = tok_text.replace(' ##', '')
+                tok_text = tok_text.replace('##', '')
 
                 # Clean whitespace
                 tok_text = tok_text.strip()
-                tok_text = " ".join(tok_text.split())
-                orig_text = " ".join(orig_tokens)
+                tok_text = ' '.join(tok_text.split())
+                orig_text = ' '.join(orig_tokens)
 
                 final_text = get_final_text(tok_text, orig_text, tokenizer)
                 if final_text in seen_predictions:
@@ -219,7 +225,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
 
                 seen_predictions[final_text] = True
             else:
-                final_text = ""
+                final_text = ''
                 seen_predictions[final_text] = True
 
             nbest.append(
@@ -230,16 +236,17 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
 
         # if we didn't inlude the empty option in the n-best, inlcude it
         if version_2:
-            if "" not in seen_predictions:
+            if '' not in seen_predictions:
                 nbest.append(
                     _NbestPrediction(
-                        text="", start_logit=null_start_logit,
+                        text='',
+                        start_logit=null_start_logit,
                         end_logit=null_end_logit))
         # In very rare edge cases we could have no valid predictions. So we
         # just create a nonce prediction in this case to avoid failure.
         if not nbest:
             nbest.append(
-                _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
+                _NbestPrediction(text='empty', start_logit=0.0, end_logit=0.0))
 
         assert len(nbest) >= 1
 
@@ -256,22 +263,23 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
         nbest_json = []
         for (i, entry) in enumerate(nbest):
             output = collections.OrderedDict()
-            output["text"] = entry.text
-            # output["probability"] = probs[i]
-            output["start_logit"] = entry.start_logit
-            output["end_logit"] = entry.end_logit
+            output['text'] = entry.text
+            # output['probability'] = probs[i]
+            output['start_logit'] = entry.start_logit
+            output['end_logit'] = entry.end_logit
             nbest_json.append(output)
 
         if not version_2:
-            all_predictions[feature.qas_id] = nbest_json[0]["text"]
+            all_predictions[feature.qas_id] = nbest_json[0]['text']
+            scores_diff_json = None
         else:
-            # predict "" iff the null score - the score of best non-null > threshold
+            # predict '' iff the null score - the score of best non-null > threshold
             score_diff = score_null - best_non_null_entry.start_logit - \
                 best_non_null_entry.end_logit
 
             scores_diff_json[feature.qas_id] = score_diff
             if score_diff > null_score_diff_threshold:
-                all_predictions[feature.qas_id] = ""
+                all_predictions[feature.qas_id] = ''
             else:
                 all_predictions[feature.qas_id] = best_non_null_entry.text
 
@@ -281,6 +289,7 @@ def predictions(dev_dataset, all_results, tokenizer, max_answer_length=64, null_
 
 def normalize_answer(s):
     """Lower text and remove punctuation, articles and extra whitespace."""
+
     def remove_articles(text):
         return re.sub(r'\b(a|an|the)\b', ' ', text)
 
@@ -340,8 +349,8 @@ def evaluate(dataset_file, predictions):
                 prediction = predictions[qa['id']]
                 exact_match += metric_max_over_ground_truths(
                     exact_match_score, prediction, ground_truths)
-                f1 += metric_max_over_ground_truths(
-                    f1_score, prediction, ground_truths)
+                f1 += metric_max_over_ground_truths(f1_score, prediction,
+                                                    ground_truths)
 
     exact_match = 100.0 * exact_match / total
     f1 = 100.0 * f1 / total
